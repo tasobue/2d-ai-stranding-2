@@ -120,7 +120,7 @@ export class GameScene extends Phaser.Scene {
         
         if (this.useViewport) {
             this.updateViewport();
-        }"
+        }
         
         // Initialize weather system with the same RNG as map generator
         this.weatherSystem = new WeatherSystem(this, this.mapGenerator['rng']);
