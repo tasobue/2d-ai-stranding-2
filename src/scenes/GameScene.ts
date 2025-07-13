@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { MapGenerator, TerrainType, MapData } from '../utils/MapGenerator';
 import { TextureGenerator } from '../graphics/TextureGenerator';
 import { AutoTileSystem } from '../graphics/AutoTileSystem';
+import { MenuScene, GameSettings } from './MenuScene';
+import { AudioManager } from '../audio/AudioManager';
 
 export class GameScene extends Phaser.Scene {
     private player!: Phaser.GameObjects.Sprite;
@@ -33,13 +35,32 @@ export class GameScene extends Phaser.Scene {
     private showingPath = false;
     private textureGenerator!: TextureGenerator;
     private autoTileSystem!: AutoTileSystem;
+    private gameSettings!: GameSettings;
+    private startTime!: number;
+    private timeText!: Phaser.GameObjects.Text;
+    private bestTimeText!: Phaser.GameObjects.Text;
+    private backToMenuButton!: Phaser.GameObjects.Text;
+    private audioManager!: AudioManager;
 
     constructor() {
         super({ key: 'GameScene' });
+    }
+
+    init(data: GameSettings): void {
+        this.gameSettings = data || { mapSize: 'medium', difficulty: 'normal' };
+        
+        const dimensions = MenuScene.getMapDimensions(this.gameSettings.mapSize);
+        this.mapWidth = dimensions.width;
+        this.mapHeight = dimensions.height;
+        
         this.mapGenerator = new MapGenerator(this.mapWidth, this.mapHeight);
+        this.startTime = this.time.now;
     }
 
     create(): void {
+        this.audioManager = new AudioManager(this);
+        this.audioManager.startAmbientBGM();
+        
         this.textureGenerator = new TextureGenerator(this, this.gridSize);
         this.textureGenerator.generateAllTextures();
         
@@ -150,6 +171,32 @@ export class GameScene extends Phaser.Scene {
             backgroundColor: '#000000',
             padding: { x: 8, y: 4 }
         });
+
+        this.timeText = this.add.text(570, 280, '', {
+            fontSize: '16px',
+            color: '#ffffff',
+            backgroundColor: '#000000',
+            padding: { x: 8, y: 4 }
+        });
+
+        this.bestTimeText = this.add.text(570, 320, '', {
+            fontSize: '14px',
+            color: '#f39c12',
+            backgroundColor: '#000000',
+            padding: { x: 8, y: 4 }
+        });
+
+        this.backToMenuButton = this.add.text(570, 360, 'Menu (M)', {
+            fontSize: '16px',
+            color: '#ffffff',
+            backgroundColor: '#8e44ad',
+            padding: { x: 8, y: 4 }
+        });
+        
+        this.backToMenuButton.setInteractive({ useHandCursor: true });
+        this.backToMenuButton.on('pointerdown', () => {
+            this.scene.start('MenuScene');
+        });
     }
 
     private setupControls(): void {
@@ -163,6 +210,10 @@ export class GameScene extends Phaser.Scene {
         this.input.keyboard!.on('keydown-P', () => {
             this.togglePath();
         });
+
+        this.input.keyboard!.on('keydown-M', () => {
+            this.scene.start('MenuScene');
+        });
     }
 
     private updatePlayerPosition(): void {
@@ -173,11 +224,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     private generateNewMap(): void {
-        this.currentMap = this.mapGenerator.generateMap();
+        const seed = this.gameSettings.customSeed;
+        this.currentMap = this.mapGenerator.generateMap(seed);
         this.playerX = this.currentMap.startX;
         this.playerY = this.currentMap.startY;
         this.goalX = this.currentMap.goalX;
         this.goalY = this.currentMap.goalY;
+        this.startTime = this.time.now;
     }
 
     private createTerrain(): void {
@@ -243,6 +296,16 @@ export class GameScene extends Phaser.Scene {
             this.currentMap.goalX, this.currentMap.goalY
         );
         this.routeText.setText(`Routes: ${hasMultipleRoutes ? 'Multiple' : 'Single'}`);
+        
+        const currentTime = (this.time.now - this.startTime) / 1000;
+        this.timeText.setText(`Time: ${currentTime.toFixed(1)}s`);
+        
+        const bestTime = this.getBestTime();
+        if (bestTime) {
+            this.bestTimeText.setText(`Best: ${bestTime.toFixed(1)}s`);
+        } else {
+            this.bestTimeText.setText('Best: --');
+        }
     }
 
     private togglePath(): void {
@@ -345,18 +408,22 @@ export class GameScene extends Phaser.Scene {
                 }
                 
                 this.createMovementParticles();
+                this.audioManager.playStep();
             }
         }
     }
 
     private checkGoalReached(): void {
         if (this.playerX === this.goalX && this.playerY === this.goalY) {
-            this.showClearMessage();
+            const completionTime = (this.time.now - this.startTime) / 1000;
+            this.saveBestTime(completionTime);
+            this.audioManager.playGoal();
+            this.showClearMessage(completionTime);
         }
     }
 
-    private showClearMessage(): void {
-        const text = this.add.text(400, 300, 'CLEAR!', {
+    private showClearMessage(completionTime: number): void {
+        const text = this.add.text(400, 280, 'CLEAR!', {
             fontSize: '48px',
             color: '#ffffff',
             stroke: '#000000',
@@ -364,13 +431,47 @@ export class GameScene extends Phaser.Scene {
         });
         text.setOrigin(0.5);
 
-        const restartText = this.add.text(400, 350, 'Press R to Restart', {
+        const timeText = this.add.text(400, 330, `Time: ${completionTime.toFixed(1)}s`, {
             fontSize: '24px',
+            color: '#f39c12',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        timeText.setOrigin(0.5);
+
+        const bestTime = this.getBestTime();
+        if (bestTime && completionTime <= bestTime) {
+            const newRecordText = this.add.text(400, 360, 'NEW BEST TIME!', {
+                fontSize: '20px',
+                color: '#e74c3c',
+                stroke: '#000000',
+                strokeThickness: 2
+            });
+            newRecordText.setOrigin(0.5);
+        }
+
+        const restartText = this.add.text(400, 420, 'Press R to Restart | Press M for Menu', {
+            fontSize: '18px',
             color: '#ffffff',
             stroke: '#000000',
             strokeThickness: 2
         });
         restartText.setOrigin(0.5);
+    }
+
+    private getBestTime(): number | null {
+        const key = `bestTime_${this.gameSettings.mapSize}_${this.gameSettings.difficulty}`;
+        const stored = localStorage.getItem(key);
+        return stored ? parseFloat(stored) : null;
+    }
+
+    private saveBestTime(time: number): void {
+        const key = `bestTime_${this.gameSettings.mapSize}_${this.gameSettings.difficulty}`;
+        const current = this.getBestTime();
+        
+        if (!current || time < current) {
+            localStorage.setItem(key, time.toString());
+        }
     }
 
     update(): void {
