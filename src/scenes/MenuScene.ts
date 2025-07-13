@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
 import { AudioManager } from '../audio/AudioManager';
+import { GameConfigManager, MapSizeConfig } from '../config/GameConfig';
 
 export interface GameSettings {
-    mapSize: 'small' | 'medium' | 'large';
+    mapSize: string;
     difficulty: 'easy' | 'normal' | 'hard';
     customSeed?: string;
 }
@@ -18,6 +19,8 @@ export class MenuScene extends Phaser.Scene {
     private seedInput!: Phaser.GameObjects.Text;
     private customSeed: string = '';
     private audioManager!: AudioManager;
+    private configManager!: GameConfigManager;
+    private availableMapSizes: MapSizeConfig[] = [];
 
     constructor() {
         super({ key: 'MenuScene' });
@@ -25,6 +28,9 @@ export class MenuScene extends Phaser.Scene {
 
     create(): void {
         this.audioManager = new AudioManager(this);
+        this.configManager = new GameConfigManager();
+        this.availableMapSizes = this.configManager.getAvailableMapSizes()
+            .filter(size => size.maxDimension <= 200); // Only show reasonable sizes in menu
         
         this.createTitle();
         this.createMapSizeSelector();
@@ -32,6 +38,7 @@ export class MenuScene extends Phaser.Scene {
         this.createSeedInput();
         this.createStartButton();
         this.createInstructions();
+        this.createCustomMapSizeInput();
     }
 
     private createTitle(): void {
@@ -177,11 +184,10 @@ export class MenuScene extends Phaser.Scene {
     }
 
     private changeMapSize(direction: number): void {
-        const sizes: Array<'small' | 'medium' | 'large'> = ['small', 'medium', 'large'];
-        const currentIndex = sizes.indexOf(this.gameSettings.mapSize);
-        const newIndex = (currentIndex + direction + sizes.length) % sizes.length;
+        const currentIndex = this.availableMapSizes.findIndex(size => size.name === this.gameSettings.mapSize);
+        const newIndex = (currentIndex + direction + this.availableMapSizes.length) % this.availableMapSizes.length;
         
-        this.gameSettings.mapSize = sizes[newIndex];
+        this.gameSettings.mapSize = this.availableMapSizes[newIndex].name;
         this.mapSizeText.setText(this.getMapSizeDisplay());
     }
 
@@ -195,11 +201,8 @@ export class MenuScene extends Phaser.Scene {
     }
 
     private getMapSizeDisplay(): string {
-        switch (this.gameSettings.mapSize) {
-            case 'small': return 'Small (12x12)';
-            case 'medium': return 'Medium (16x16)';
-            case 'large': return 'Large (20x20)';
-        }
+        const config = this.configManager.getMapSizeConfig(this.gameSettings.mapSize);
+        return config ? config.displayName : 'Unknown';
     }
 
     private getDifficultyDisplay(): string {
@@ -219,16 +222,56 @@ export class MenuScene extends Phaser.Scene {
         }
     }
 
+    private createCustomMapSizeInput(): void {
+        const label = this.add.text(200, 350, 'Custom Size:', {
+            fontSize: '18px',
+            color: '#ffffff'
+        });
+
+        const customButton = this.add.text(350, 350, 'Set Custom Size', {
+            fontSize: '16px',
+            color: '#ffffff',
+            backgroundColor: '#9b59b6',
+            padding: { x: 8, y: 4 }
+        });
+
+        customButton.setInteractive({ useHandCursor: true });
+        customButton.on('pointerdown', () => {
+            this.openCustomSizeInput();
+        });
+    }
+
+    private openCustomSizeInput(): void {
+        const widthInput = prompt('Enter map width (max 10000):');
+        if (widthInput !== null) {
+            const heightInput = prompt('Enter map height (max 10000):');
+            if (heightInput !== null) {
+                const width = Math.max(8, Math.min(10000, parseInt(widthInput) || 16));
+                const height = Math.max(8, Math.min(10000, parseInt(heightInput) || 16));
+                
+                const customKey = this.configManager.setCustomMapSize(width, height);
+                this.gameSettings.mapSize = customKey;
+                this.mapSizeText.setText(this.getMapSizeDisplay());
+                
+                this.audioManager.playMenuConfirm();
+            }
+        }
+    }
+
     private startGame(): void {
         this.scene.start('GameScene', this.gameSettings);
     }
 
-    static getMapDimensions(size: 'small' | 'medium' | 'large'): { width: number; height: number } {
-        switch (size) {
-            case 'small': return { width: 12, height: 12 };
-            case 'medium': return { width: 16, height: 16 };
-            case 'large': return { width: 20, height: 20 };
+    static getMapDimensions(mapSize: string): { width: number; height: number } {
+        const configManager = new GameConfigManager();
+        const config = configManager.getMapSizeConfig(mapSize);
+        
+        if (config) {
+            return { width: config.width, height: config.height };
         }
+        
+        // Fallback for unknown map sizes
+        return { width: 16, height: 16 };
     }
 
     static getDifficultySettings(difficulty: 'easy' | 'normal' | 'hard') {

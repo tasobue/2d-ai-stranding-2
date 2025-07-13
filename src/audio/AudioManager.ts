@@ -111,6 +111,11 @@ export class AudioManager {
         }
     }
 
+    stopAllSounds(): void {
+        this.stopBGM();
+        // Additional cleanup if needed for other sound effects
+    }
+
     setVolume(volume: number): void {
         // Placeholder for volume control
         // In a real implementation, this would control the Web Audio API gain

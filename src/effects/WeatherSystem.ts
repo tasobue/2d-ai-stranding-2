@@ -12,6 +12,7 @@ export interface WeatherEffect {
     intensity: number; // 0.0 to 1.0
     visibility: number; // 0.0 to 1.0 (1.0 = full visibility)
     movementModifier: number; // 0.5 to 1.0 (1.0 = normal speed)
+    damageMultiplier: number; // 1.0 to 2.0 (1.0 = normal damage)
 }
 
 export class WeatherSystem {
@@ -29,7 +30,8 @@ export class WeatherSystem {
             type: WeatherType.CLEAR,
             intensity: 0,
             visibility: 1.0,
-            movementModifier: 1.0
+            movementModifier: 1.0,
+            damageMultiplier: 1.0
         };
         
         this.setupWeatherCycle();
@@ -100,21 +102,24 @@ export class WeatherSystem {
                     type,
                     intensity,
                     visibility: 0.7 + (1.0 - intensity) * 0.3,
-                    movementModifier: 0.8 + (1.0 - intensity) * 0.2
+                    movementModifier: 0.8 + (1.0 - intensity) * 0.2,
+                    damageMultiplier: 1.0 + intensity * 0.3
                 };
             case WeatherType.SNOW:
                 return {
                     type,
                     intensity,
                     visibility: 0.6 + (1.0 - intensity) * 0.4,
-                    movementModifier: 0.7 + (1.0 - intensity) * 0.3
+                    movementModifier: 0.7 + (1.0 - intensity) * 0.3,
+                    damageMultiplier: 1.0 + intensity * 0.5
                 };
             case WeatherType.FOG:
                 return {
                     type,
                     intensity,
                     visibility: 0.4 + (1.0 - intensity) * 0.6,
-                    movementModifier: 0.9 + (1.0 - intensity) * 0.1
+                    movementModifier: 0.9 + (1.0 - intensity) * 0.1,
+                    damageMultiplier: 1.0 + intensity * 0.2
                 };
             case WeatherType.CLEAR:
             default:
@@ -122,7 +127,8 @@ export class WeatherSystem {
                     type: WeatherType.CLEAR,
                     intensity: 0,
                     visibility: 1.0,
-                    movementModifier: 1.0
+                    movementModifier: 1.0,
+                    damageMultiplier: 1.0
                 };
         }
     }

@@ -5,6 +5,7 @@ import { AutoTileSystem } from '../graphics/AutoTileSystem';
 import { MenuScene, GameSettings } from './MenuScene';
 import { AudioManager } from '../audio/AudioManager';
 import { WeatherSystem, WeatherType } from '../effects/WeatherSystem';
+import { GameConfigManager } from '../config/GameConfig';
 
 export class GameScene extends Phaser.Scene {
     private player!: Phaser.GameObjects.Sprite;
@@ -48,6 +49,19 @@ export class GameScene extends Phaser.Scene {
     private collectedItems = 0;
     private weatherSystem!: WeatherSystem;
     private weatherText!: Phaser.GameObjects.Text;
+    private maxHP = 100;
+    private currentHP = 100;
+    private hpText!: Phaser.GameObjects.Text;
+    private hpBar!: Phaser.GameObjects.Graphics;
+    private hpBarBg!: Phaser.GameObjects.Graphics;
+    private showDetailedInfo = false;
+    private toggleInfoButton!: Phaser.GameObjects.Text;
+    private configManager!: GameConfigManager;
+    private useViewport = false;
+    private viewportWidth = 0;
+    private viewportHeight = 0;
+    private renderDistance = 100;
+    private cameraContainer!: Phaser.GameObjects.Container;
 
     constructor() {
         super({ key: 'GameScene' });
@@ -56,12 +70,25 @@ export class GameScene extends Phaser.Scene {
     init(data: GameSettings): void {
         this.gameSettings = data || { mapSize: 'medium', difficulty: 'normal' };
         
+        this.configManager = new GameConfigManager();
         const dimensions = MenuScene.getMapDimensions(this.gameSettings.mapSize);
         this.mapWidth = dimensions.width;
         this.mapHeight = dimensions.height;
         
+        // Check if we should use viewport system
+        this.useViewport = this.configManager.shouldUseViewport(this.gameSettings.mapSize);
+        if (this.useViewport) {
+            const viewportSize = this.configManager.getViewportSize();
+            this.viewportWidth = viewportSize.width;
+            this.viewportHeight = viewportSize.height;
+            this.renderDistance = this.configManager.getTileRenderDistance();
+        }
+        
         this.mapGenerator = new MapGenerator(this.mapWidth, this.mapHeight);
         this.startTime = this.time.now;
+        
+        // Initialize HP based on difficulty
+        this.initializeHP();
     }
 
     create(): void {
@@ -75,8 +102,14 @@ export class GameScene extends Phaser.Scene {
         this.autoTileSystem.generateTransitionTextures();
         
         this.generateNewMap();
-        this.createGrid();
-        this.createTerrain();
+        
+        if (this.useViewport) {
+            this.setupViewportSystem();
+        } else {
+            this.createGrid();
+            this.createTerrain();
+        }
+        
         this.createCheckpoints();
         this.createCollectibles();
         this.createPlayer();
@@ -84,6 +117,10 @@ export class GameScene extends Phaser.Scene {
         this.createUI();
         this.setupControls();
         this.updatePlayerPosition();
+        
+        if (this.useViewport) {
+            this.updateViewport();
+        }"
         
         // Initialize weather system with the same RNG as map generator
         this.weatherSystem = new WeatherSystem(this, this.mapGenerator['rng']);
@@ -139,6 +176,7 @@ export class GameScene extends Phaser.Scene {
             backgroundColor: '#000000',
             padding: { x: 8, y: 4 }
         });
+        this.positionText.setVisible(this.showDetailedInfo);
 
         this.distanceText = this.add.text(570, 80, '', {
             fontSize: '16px',
@@ -146,6 +184,7 @@ export class GameScene extends Phaser.Scene {
             backgroundColor: '#000000',
             padding: { x: 8, y: 4 }
         });
+        this.distanceText.setVisible(this.showDetailedInfo);
 
         this.restartButton = this.add.text(570, 120, 'Restart (R)', {
             fontSize: '16px',
@@ -165,6 +204,7 @@ export class GameScene extends Phaser.Scene {
             backgroundColor: '#000000',
             padding: { x: 8, y: 4 }
         });
+        this.seedText.setVisible(this.showDetailedInfo);
 
         this.showPathButton = this.add.text(570, 200, 'Show Path (P)', {
             fontSize: '16px',
@@ -184,22 +224,35 @@ export class GameScene extends Phaser.Scene {
             backgroundColor: '#000000',
             padding: { x: 8, y: 4 }
         });
+        this.routeText.setVisible(this.showDetailedInfo);
 
-        this.timeText = this.add.text(570, 280, '', {
+        this.toggleInfoButton = this.add.text(570, 280, 'Show Info (I)', {
+            fontSize: '16px',
+            color: '#ffffff',
+            backgroundColor: '#34495e',
+            padding: { x: 8, y: 4 }
+        });
+        
+        this.toggleInfoButton.setInteractive({ useHandCursor: true });
+        this.toggleInfoButton.on('pointerdown', () => {
+            this.toggleDetailedInfo();
+        });
+
+        this.timeText = this.add.text(570, 320, '', {
             fontSize: '16px',
             color: '#ffffff',
             backgroundColor: '#000000',
             padding: { x: 8, y: 4 }
         });
 
-        this.bestTimeText = this.add.text(570, 320, '', {
+        this.bestTimeText = this.add.text(570, 360, '', {
             fontSize: '14px',
             color: '#f39c12',
             backgroundColor: '#000000',
             padding: { x: 8, y: 4 }
         });
 
-        this.backToMenuButton = this.add.text(570, 360, 'Menu (M)', {
+        this.backToMenuButton = this.add.text(570, 400, 'Menu (M)', {
             fontSize: '16px',
             color: '#ffffff',
             backgroundColor: '#8e44ad',
@@ -211,19 +264,22 @@ export class GameScene extends Phaser.Scene {
             this.scene.start('MenuScene');
         });
 
-        this.scoreText = this.add.text(570, 400, '', {
+        this.scoreText = this.add.text(570, 440, '', {
             fontSize: '16px',
             color: '#ffffff',
             backgroundColor: '#000000',
             padding: { x: 8, y: 4 }
         });
 
-        this.weatherText = this.add.text(570, 450, '', {
+        this.weatherText = this.add.text(570, 480, '', {
             fontSize: '14px',
             color: '#85c1e9',
             backgroundColor: '#000000',
             padding: { x: 8, y: 4 }
         });
+
+        // Create HP UI
+        this.createHPUI();
     }
 
     private setupControls(): void {
@@ -240,6 +296,10 @@ export class GameScene extends Phaser.Scene {
 
         this.input.keyboard!.on('keydown-M', () => {
             this.scene.start('MenuScene');
+        });
+
+        this.input.keyboard!.on('keydown-I', () => {
+            this.toggleDetailedInfo();
         });
     }
 
@@ -410,6 +470,8 @@ export class GameScene extends Phaser.Scene {
         if (this.weatherSystem) {
             this.weatherText.setText(`Weather: ${this.weatherSystem.getWeatherInfo()}`);
         }
+        
+        this.updateHPUI();
     }
 
     private togglePath(): void {
@@ -570,6 +632,12 @@ export class GameScene extends Phaser.Scene {
                 this.audioManager.playStep();
                 this.checkCollectibles();
                 this.checkCheckpoints();
+                this.applyTerrainDamage(terrainType);
+                
+                // Update viewport for large maps
+                if (this.useViewport) {
+                    this.updateViewport();
+                }
                 
                 // Apply weather movement modifier
                 if (this.weatherSystem) {
@@ -671,10 +739,315 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
-    destroy(): void {
+    private initializeHP(): void {
+        // Set HP based on difficulty
+        switch (this.gameSettings.difficulty) {
+            case 'easy':
+                this.maxHP = 150;
+                break;
+            case 'normal':
+                this.maxHP = 100;
+                break;
+            case 'hard':
+                this.maxHP = 75;
+                break;
+            default:
+                this.maxHP = 100;
+        }
+        this.currentHP = this.maxHP;
+    }
+
+    private createHPUI(): void {
+        // HP Text
+        this.hpText = this.add.text(570, 490, '', {
+            fontSize: '16px',
+            color: '#e74c3c',
+            backgroundColor: '#000000',
+            padding: { x: 8, y: 4 }
+        });
+
+        // HP Bar Background
+        this.hpBarBg = this.add.graphics();
+        this.hpBarBg.fillStyle(0x333333);
+        this.hpBarBg.fillRect(570, 520, 120, 20);
+        this.hpBarBg.lineStyle(2, 0x666666);
+        this.hpBarBg.strokeRect(570, 520, 120, 20);
+
+        // HP Bar
+        this.hpBar = this.add.graphics();
+    }
+
+    private updateHPUI(): void {
+        this.hpText.setText(`HP: ${this.currentHP}/${this.maxHP}`);
+        
+        // Update HP bar
+        this.hpBar.clear();
+        const hpRatio = this.currentHP / this.maxHP;
+        const barWidth = 116 * hpRatio; // 120 - 4 (border)
+        
+        // Color based on HP percentage
+        let barColor = 0x2ecc71; // Green
+        if (hpRatio < 0.3) {
+            barColor = 0xe74c3c; // Red
+        } else if (hpRatio < 0.6) {
+            barColor = 0xf39c12; // Orange
+        }
+        
+        this.hpBar.fillStyle(barColor);
+        this.hpBar.fillRect(572, 552, barWidth, 16);
+    }
+
+    private applyTerrainDamage(terrainType: TerrainType): void {
+        let damage = 0;
+        
+        // Apply damage based on terrain and weather
+        const weather = this.weatherSystem?.getCurrentWeather();
+        const weatherMultiplier = weather ? weather.damageMultiplier || 1.0 : 1.0;
+        
+        switch (terrainType) {
+            case TerrainType.FOREST:
+                damage = 1; // Thorns and obstacles
+                break;
+            case TerrainType.MOUNTAIN_PASS:
+                damage = 2; // Rocky terrain
+                break;
+            case TerrainType.SAND:
+                damage = 1; // Dehydration in desert
+                break;
+        }
+        
+        // Apply weather multiplier
+        damage = Math.floor(damage * weatherMultiplier);
+        
+        if (damage > 0) {
+            this.takeDamage(damage);
+        }
+    }
+
+    private takeDamage(amount: number): void {
+        this.currentHP = Math.max(0, this.currentHP - amount);
+        this.updateHPUI();
+        
+        // Visual feedback for damage
+        this.cameras.main.shake(100, 0.01);
+        
+        // Flash effect
+        this.tweens.add({
+            targets: this.player,
+            alpha: 0.5,
+            duration: 100,
+            yoyo: true,
+            repeat: 1
+        });
+        
+        if (this.currentHP <= 0) {
+            this.gameOver();
+        }
+    }
+
+    private gameOver(): void {
+        // Stop all sounds
+        this.audioManager.stopAllSounds();
+        
+        // Create game over overlay
+        const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.8);
+        overlay.setDepth(100);
+        
+        const gameOverText = this.add.text(400, 250, 'GAME OVER', {
+            fontSize: '48px',
+            color: '#e74c3c',
+            stroke: '#000000',
+            strokeThickness: 4
+        });
+        gameOverText.setOrigin(0.5);
+        gameOverText.setDepth(101);
+        
+        const hpText = this.add.text(400, 320, 'Your health reached zero!', {
+            fontSize: '24px',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 2
+        });
+        hpText.setOrigin(0.5);
+        hpText.setDepth(101);
+        
+        // Continue and Menu buttons
+        const continueButton = this.add.text(320, 400, 'Continue (C)', {
+            fontSize: '20px',
+            color: '#2ecc71',
+            backgroundColor: '#27ae60',
+            padding: { x: 12, y: 8 }
+        });
+        continueButton.setOrigin(0.5);
+        continueButton.setDepth(101);
+        continueButton.setInteractive({ useHandCursor: true });
+        continueButton.on('pointerdown', () => {
+            this.continueGame();
+        });
+        
+        const menuButton = this.add.text(480, 400, 'Menu (M)', {
+            fontSize: '20px',
+            color: '#3498db',
+            backgroundColor: '#2980b9',
+            padding: { x: 12, y: 8 }
+        });
+        menuButton.setOrigin(0.5);
+        menuButton.setDepth(101);
+        menuButton.setInteractive({ useHandCursor: true });
+        menuButton.on('pointerdown', () => {
+            this.scene.start('MenuScene');
+        });
+        
+        // Keyboard controls
+        this.input.keyboard!.on('keydown-C', () => {
+            this.continueGame();
+        });
+        
+        this.input.keyboard!.on('keydown-M', () => {
+            this.scene.start('MenuScene');
+        });
+    }
+
+    private continueGame(): void {
+        // Restore HP and restart from last checkpoint or start
+        this.currentHP = this.maxHP;
+        
+        // Find last visited checkpoint
+        const lastCheckpoint = this.currentMap.checkpoints
+            .filter(cp => cp.visited)
+            .pop();
+        
+        if (lastCheckpoint) {
+            this.playerX = lastCheckpoint.x;
+            this.playerY = lastCheckpoint.y;
+        } else {
+            // Return to start
+            this.playerX = this.currentMap.startX;
+            this.playerY = this.currentMap.startY;
+        }
+        
+        this.updatePlayerPosition();
+        this.updateHPUI();
+        
+        // Restart the scene cleanly
+        this.scene.restart();
+    }
+
+    private toggleDetailedInfo(): void {
+        this.showDetailedInfo = !this.showDetailedInfo;
+        
+        // Toggle visibility of detailed UI elements
+        this.positionText.setVisible(this.showDetailedInfo);
+        this.distanceText.setVisible(this.showDetailedInfo);
+        this.seedText.setVisible(this.showDetailedInfo);
+        this.routeText.setVisible(this.showDetailedInfo);
+        
+        // Update button text
+        this.toggleInfoButton.setText(this.showDetailedInfo ? 'Hide Info (I)' : 'Show Info (I)');
+    }
+
+    private setupViewportSystem(): void {
+        // Create container for all game objects
+        this.cameraContainer = this.add.container(0, 0);
+        
+        // Set camera bounds and enable smooth following
+        this.cameras.main.setBounds(0, 0, this.mapWidth * this.gridSize + 100, this.mapHeight * this.gridSize + 100);
+        this.cameras.main.setLerp(0.1, 0.1);
+        
+        // Initially create only viewport-sized terrain
+        this.createViewportTerrain();
+    }
+
+    private createViewportTerrain(): void {
+        this.terrainTiles = [];
+        
+        // Initialize 2D array for entire map
+        for (let y = 0; y < this.mapHeight; y++) {
+            this.terrainTiles[y] = [];
+            for (let x = 0; x < this.mapWidth; x++) {
+                this.terrainTiles[y][x] = null as any; // Will be created when needed
+            }
+        }
+    }
+
+    private updateViewport(): void {
+        if (!this.useViewport) return;
+        
+        // Calculate visible area around player
+        const startX = Math.max(0, this.playerX - this.renderDistance);
+        const endX = Math.min(this.mapWidth - 1, this.playerX + this.renderDistance);
+        const startY = Math.max(0, this.playerY - this.renderDistance);
+        const endY = Math.min(this.mapHeight - 1, this.playerY + this.renderDistance);
+        
+        // Create/update tiles in visible area
+        for (let y = startY; y <= endY; y++) {
+            for (let x = startX; x <= endX; x++) {
+                if (!this.terrainTiles[y][x]) {
+                    this.createTerrainTile(x, y);
+                }
+            }
+        }
+        
+        // Remove tiles that are too far away to improve performance
+        for (let y = 0; y < this.mapHeight; y++) {
+            for (let x = 0; x < this.mapWidth; x++) {
+                const tile = this.terrainTiles[y][x];
+                if (tile && (x < startX - 50 || x > endX + 50 || y < startY - 50 || y > endY + 50)) {
+                    tile.destroy();
+                    this.terrainTiles[y][x] = null as any;
+                }
+            }
+        }
+        
+        // Update camera to follow player
+        this.cameras.main.startFollow(this.player);
+    }
+
+    private createTerrainTile(x: number, y: number): void {
+        const terrainType = this.currentMap.grid[y][x];
+        
+        // Use auto-tile system for better texture selection
+        const textureKey = this.autoTileSystem.getAutoTileKey(
+            this.currentMap.grid, x, y, this.mapWidth, this.mapHeight
+        );
+        
+        const tile = this.add.sprite(
+            x * this.gridSize + 50 + this.gridSize / 2,
+            y * this.gridSize + 50 + this.gridSize / 2,
+            textureKey
+        );
+        
+        tile.setDisplaySize(this.gridSize, this.gridSize);
+        
+        // Add animations based on terrain type
+        if (terrainType === TerrainType.WATER) {
+            this.tweens.add({
+                targets: tile,
+                alpha: 0.7,
+                duration: 2000,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+        } else if (terrainType === TerrainType.FOREST) {
+            this.tweens.add({
+                targets: tile,
+                scaleX: 1.02,
+                scaleY: 1.02,
+                duration: 3000,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+        }
+        
+        this.terrainTiles[y][x] = tile;
+    }
+
+    shutdown(): void {
         if (this.weatherSystem) {
             this.weatherSystem.destroy();
         }
-        super.destroy();
+        super.shutdown();
     }
 }
