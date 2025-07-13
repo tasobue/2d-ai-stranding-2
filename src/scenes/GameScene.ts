@@ -22,9 +22,13 @@ export class GameScene extends Phaser.Scene {
     private distanceText!: Phaser.GameObjects.Text;
     private restartButton!: Phaser.GameObjects.Text;
     private seedText!: Phaser.GameObjects.Text;
+    private routeText!: Phaser.GameObjects.Text;
+    private showPathButton!: Phaser.GameObjects.Text;
     private mapGenerator: MapGenerator;
     private currentMap!: MapData;
     private terrainTiles: Phaser.GameObjects.Rectangle[][] = [];
+    private pathTiles: Phaser.GameObjects.Rectangle[] = [];
+    private showingPath = false;
 
     constructor() {
         super({ key: 'GameScene' });
@@ -108,6 +112,25 @@ export class GameScene extends Phaser.Scene {
             backgroundColor: '#000000',
             padding: { x: 8, y: 4 }
         });
+
+        this.showPathButton = this.add.text(570, 200, 'Show Path (P)', {
+            fontSize: '16px',
+            color: '#ffffff',
+            backgroundColor: '#2c3e50',
+            padding: { x: 8, y: 4 }
+        });
+        
+        this.showPathButton.setInteractive({ useHandCursor: true });
+        this.showPathButton.on('pointerdown', () => {
+            this.togglePath();
+        });
+
+        this.routeText = this.add.text(570, 240, '', {
+            fontSize: '14px',
+            color: '#ffffff',
+            backgroundColor: '#000000',
+            padding: { x: 8, y: 4 }
+        });
     }
 
     private setupControls(): void {
@@ -116,6 +139,10 @@ export class GameScene extends Phaser.Scene {
         
         this.input.keyboard!.on('keydown-R', () => {
             this.scene.restart();
+        });
+
+        this.input.keyboard!.on('keydown-P', () => {
+            this.togglePath();
         });
     }
 
@@ -165,6 +192,50 @@ export class GameScene extends Phaser.Scene {
         );
         this.distanceText.setText(`Distance: ${distanceToGoal.toFixed(1)}`);
         this.seedText.setText(`Seed: ${this.currentMap.seed}`);
+        
+        const hasMultipleRoutes = this.mapGenerator.hasMultipleRoutes(
+            this.currentMap.grid, this.currentMap.startX, this.currentMap.startY,
+            this.currentMap.goalX, this.currentMap.goalY
+        );
+        this.routeText.setText(`Routes: ${hasMultipleRoutes ? 'Multiple' : 'Single'}`);
+    }
+
+    private togglePath(): void {
+        if (this.showingPath) {
+            this.hidePath();
+        } else {
+            this.showPath();
+        }
+        this.showingPath = !this.showingPath;
+        this.showPathButton.setText(this.showingPath ? 'Hide Path (P)' : 'Show Path (P)');
+    }
+
+    private showPath(): void {
+        const path = this.mapGenerator.findPath(
+            this.currentMap.grid, this.playerX, this.playerY,
+            this.currentMap.goalX, this.currentMap.goalY
+        );
+
+        this.pathTiles = [];
+        for (const [x, y] of path) {
+            if (x !== this.playerX || y !== this.playerY) {
+                const pathTile = this.add.rectangle(
+                    x * this.gridSize + 50 + this.gridSize / 2,
+                    y * this.gridSize + 50 + this.gridSize / 2,
+                    this.gridSize / 2,
+                    this.gridSize / 2,
+                    0xffff00,
+                    0.7
+                );
+                pathTile.setDepth(10);
+                this.pathTiles.push(pathTile);
+            }
+        }
+    }
+
+    private hidePath(): void {
+        this.pathTiles.forEach(tile => tile.destroy());
+        this.pathTiles = [];
     }
 
     private movePlayer(dx: number, dy: number): void {
@@ -180,6 +251,11 @@ export class GameScene extends Phaser.Scene {
                 this.playerY = newY;
                 this.updatePlayerPosition();
                 this.checkGoalReached();
+                
+                if (this.showingPath) {
+                    this.hidePath();
+                    this.showPath();
+                }
             }
         }
     }
