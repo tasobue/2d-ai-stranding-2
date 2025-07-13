@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { MapGenerator, TerrainType, MapData } from '../utils/MapGenerator';
 
 export class GameScene extends Phaser.Scene {
     private player!: Phaser.GameObjects.Rectangle;
@@ -20,13 +21,20 @@ export class GameScene extends Phaser.Scene {
     private positionText!: Phaser.GameObjects.Text;
     private distanceText!: Phaser.GameObjects.Text;
     private restartButton!: Phaser.GameObjects.Text;
+    private seedText!: Phaser.GameObjects.Text;
+    private mapGenerator: MapGenerator;
+    private currentMap!: MapData;
+    private terrainTiles: Phaser.GameObjects.Rectangle[][] = [];
 
     constructor() {
         super({ key: 'GameScene' });
+        this.mapGenerator = new MapGenerator(this.mapWidth, this.mapHeight);
     }
 
     create(): void {
+        this.generateNewMap();
         this.createGrid();
+        this.createTerrain();
         this.createPlayer();
         this.createGoal();
         this.createUI();
@@ -93,6 +101,13 @@ export class GameScene extends Phaser.Scene {
         this.restartButton.on('pointerdown', () => {
             this.scene.restart();
         });
+
+        this.seedText = this.add.text(570, 160, '', {
+            fontSize: '14px',
+            color: '#ffffff',
+            backgroundColor: '#000000',
+            padding: { x: 8, y: 4 }
+        });
     }
 
     private setupControls(): void {
@@ -111,6 +126,36 @@ export class GameScene extends Phaser.Scene {
         this.updateUI();
     }
 
+    private generateNewMap(): void {
+        this.currentMap = this.mapGenerator.generateMap();
+        this.playerX = this.currentMap.startX;
+        this.playerY = this.currentMap.startY;
+        this.goalX = this.currentMap.goalX;
+        this.goalY = this.currentMap.goalY;
+    }
+
+    private createTerrain(): void {
+        this.terrainTiles = [];
+        
+        for (let y = 0; y < this.mapHeight; y++) {
+            this.terrainTiles[y] = [];
+            for (let x = 0; x < this.mapWidth; x++) {
+                const terrainType = this.currentMap.grid[y][x];
+                const config = MapGenerator.getTerrainConfig(terrainType);
+                
+                const tile = this.add.rectangle(
+                    x * this.gridSize + 50 + this.gridSize / 2,
+                    y * this.gridSize + 50 + this.gridSize / 2,
+                    this.gridSize,
+                    this.gridSize,
+                    config.color
+                );
+                
+                this.terrainTiles[y][x] = tile;
+            }
+        }
+    }
+
     private updateUI(): void {
         this.positionText.setText(`Position: (${this.playerX}, ${this.playerY})`);
         
@@ -119,6 +164,7 @@ export class GameScene extends Phaser.Scene {
             Math.pow(this.goalY - this.playerY, 2)
         );
         this.distanceText.setText(`Distance: ${distanceToGoal.toFixed(1)}`);
+        this.seedText.setText(`Seed: ${this.currentMap.seed}`);
     }
 
     private movePlayer(dx: number, dy: number): void {
@@ -126,10 +172,15 @@ export class GameScene extends Phaser.Scene {
         const newY = this.playerY + dy;
 
         if (newX >= 0 && newX < this.mapWidth && newY >= 0 && newY < this.mapHeight) {
-            this.playerX = newX;
-            this.playerY = newY;
-            this.updatePlayerPosition();
-            this.checkGoalReached();
+            const terrainType = this.currentMap.grid[newY][newX];
+            const config = MapGenerator.getTerrainConfig(terrainType);
+            
+            if (config.walkable) {
+                this.playerX = newX;
+                this.playerY = newY;
+                this.updatePlayerPosition();
+                this.checkGoalReached();
+            }
         }
     }
 
