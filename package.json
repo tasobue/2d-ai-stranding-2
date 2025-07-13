@@ -1,0 +1,29 @@
+{
+  "name": "2d-ai-stranding-2",
+  "version": "1.0.0",
+  "description": "AIが生成した２Dゲームマップを冒険し荷物を届けるゲーム",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tasobue/2d-ai-stranding-2.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/tasobue/2d-ai-stranding-2/issues"
+  },
+  "homepage": "https://github.com/tasobue/2d-ai-stranding-2#readme",
+  "devDependencies": {
+    "@types/node": "^24.0.13",
+    "phaser": "^3.90.0",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.4"
+  }
+}
