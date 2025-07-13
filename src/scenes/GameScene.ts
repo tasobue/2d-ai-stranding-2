@@ -29,6 +29,7 @@ export class GameScene extends Phaser.Scene {
         this.createGrid();
         this.createPlayer();
         this.createGoal();
+        this.createUI();
         this.setupControls();
         this.updatePlayerPosition();
     }
@@ -66,15 +67,58 @@ export class GameScene extends Phaser.Scene {
         this.goal.setStrokeStyle(2, 0xc0392b);
     }
 
+    private createUI(): void {
+        this.positionText = this.add.text(570, 50, '', {
+            fontSize: '16px',
+            color: '#ffffff',
+            backgroundColor: '#000000',
+            padding: { x: 8, y: 4 }
+        });
+
+        this.distanceText = this.add.text(570, 80, '', {
+            fontSize: '16px',
+            color: '#ffffff',
+            backgroundColor: '#000000',
+            padding: { x: 8, y: 4 }
+        });
+
+        this.restartButton = this.add.text(570, 120, 'Restart (R)', {
+            fontSize: '16px',
+            color: '#ffffff',
+            backgroundColor: '#333333',
+            padding: { x: 8, y: 4 }
+        });
+        
+        this.restartButton.setInteractive({ useHandCursor: true });
+        this.restartButton.on('pointerdown', () => {
+            this.scene.restart();
+        });
+    }
+
     private setupControls(): void {
         this.cursors = this.input.keyboard!.createCursorKeys();
         this.wasd = this.input.keyboard!.addKeys('W,S,A,D') as any;
+        
+        this.input.keyboard!.on('keydown-R', () => {
+            this.scene.restart();
+        });
     }
 
     private updatePlayerPosition(): void {
         const worldX = this.playerX * this.gridSize + 50 + this.gridSize / 2;
         const worldY = this.playerY * this.gridSize + 50 + this.gridSize / 2;
         this.player.setPosition(worldX, worldY);
+        this.updateUI();
+    }
+
+    private updateUI(): void {
+        this.positionText.setText(`Position: (${this.playerX}, ${this.playerY})`);
+        
+        const distanceToGoal = Math.sqrt(
+            Math.pow(this.goalX - this.playerX, 2) + 
+            Math.pow(this.goalY - this.playerY, 2)
+        );
+        this.distanceText.setText(`Distance: ${distanceToGoal.toFixed(1)}`);
     }
 
     private movePlayer(dx: number, dy: number): void {
@@ -111,10 +155,6 @@ export class GameScene extends Phaser.Scene {
             strokeThickness: 2
         });
         restartText.setOrigin(0.5);
-
-        this.input.keyboard!.on('keydown-R', () => {
-            this.scene.restart();
-        });
     }
 
     update(): void {
