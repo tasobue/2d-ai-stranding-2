@@ -20,6 +20,8 @@ export class TextureGenerator {
         this.generateMountainPassTexture();
         this.generatePlayerTexture();
         this.generateGoalTexture();
+        this.generateCheckpointTexture();
+        this.generateCollectibleTextures();
     }
 
     private generateGrassTexture(): void {
@@ -262,6 +264,115 @@ export class TextureGenerator {
         graphics.fillRect(12, 26, 8, 4);
         
         graphics.generateTexture('goal', this.tileSize, this.tileSize);
+        graphics.destroy();
+    }
+
+    private generateCheckpointTexture(): void {
+        const graphics = this.scene.add.graphics();
+        
+        // Checkpoint base (blue circle)
+        graphics.fillStyle(0x3498db);
+        graphics.fillCircle(this.tileSize / 2, this.tileSize / 2, 12);
+        
+        // Inner circle
+        graphics.fillStyle(0x2980b9);
+        graphics.fillCircle(this.tileSize / 2, this.tileSize / 2, 8);
+        
+        // Center dot
+        graphics.fillStyle(0xffffff);
+        graphics.fillCircle(this.tileSize / 2, this.tileSize / 2, 4);
+        
+        // Checkpoint number placeholder
+        graphics.fillStyle(0x2980b9);
+        graphics.fillRect(this.tileSize / 2 - 2, this.tileSize / 2 - 2, 4, 4);
+        
+        graphics.generateTexture('checkpoint', this.tileSize, this.tileSize);
+        graphics.destroy();
+    }
+
+    private generateCollectibleTextures(): void {
+        this.generateCoinTexture();
+        this.generateGemTexture();
+        this.generateStarTexture();
+    }
+
+    private generateCoinTexture(): void {
+        const graphics = this.scene.add.graphics();
+        
+        // Coin body (golden)
+        graphics.fillStyle(0xf1c40f);
+        graphics.fillCircle(this.tileSize / 2, this.tileSize / 2, 10);
+        
+        // Coin shine
+        graphics.fillStyle(0xf39c12);
+        graphics.fillCircle(this.tileSize / 2, this.tileSize / 2, 8);
+        
+        // Inner detail
+        graphics.fillStyle(0xf1c40f);
+        graphics.fillCircle(this.tileSize / 2, this.tileSize / 2, 6);
+        
+        // Center symbol
+        graphics.fillStyle(0xe67e22);
+        graphics.fillRect(this.tileSize / 2 - 2, this.tileSize / 2 - 4, 4, 8);
+        graphics.fillRect(this.tileSize / 2 - 4, this.tileSize / 2 - 2, 8, 4);
+        
+        graphics.generateTexture('coin', this.tileSize, this.tileSize);
+        graphics.destroy();
+    }
+
+    private generateGemTexture(): void {
+        const graphics = this.scene.add.graphics();
+        
+        // Gem body (purple)
+        graphics.fillStyle(0x9b59b6);
+        const centerX = this.tileSize / 2;
+        const centerY = this.tileSize / 2;
+        
+        // Diamond shape
+        graphics.beginPath();
+        graphics.moveTo(centerX, centerY - 8);
+        graphics.lineTo(centerX + 6, centerY - 2);
+        graphics.lineTo(centerX + 4, centerY + 6);
+        graphics.lineTo(centerX - 4, centerY + 6);
+        graphics.lineTo(centerX - 6, centerY - 2);
+        graphics.closePath();
+        graphics.fillPath();
+        
+        // Gem highlights
+        graphics.fillStyle(0xad6bad);
+        graphics.fillRect(centerX - 1, centerY - 6, 2, 4);
+        graphics.fillRect(centerX + 2, centerY - 4, 2, 3);
+        
+        graphics.generateTexture('gem', this.tileSize, this.tileSize);
+        graphics.destroy();
+    }
+
+    private generateStarTexture(): void {
+        const graphics = this.scene.add.graphics();
+        
+        // Star body (yellow)
+        graphics.fillStyle(0xf1c40f);
+        const centerX = this.tileSize / 2;
+        const centerY = this.tileSize / 2;
+        
+        // 5-pointed star
+        graphics.beginPath();
+        for (let i = 0; i < 5; i++) {
+            const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+            const x = centerX + Math.cos(angle) * 8;
+            const y = centerY + Math.sin(angle) * 8;
+            
+            if (i === 0) graphics.moveTo(x, y);
+            else graphics.lineTo(x, y);
+        }
+        graphics.closePath();
+        graphics.fillPath();
+        
+        // Star center
+        graphics.fillStyle(0xe67e22);
+        graphics.fillCircle(centerX, centerY, 3);
+        
+        graphics.generateTexture('star', this.tileSize, this.tileSize);
         graphics.destroy();
     }
 

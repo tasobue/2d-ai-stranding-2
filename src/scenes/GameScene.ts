@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
-import { MapGenerator, TerrainType, MapData } from '../utils/MapGenerator';
+import { MapGenerator, TerrainType, MapData, Checkpoint, CollectibleItem } from '../utils/MapGenerator';
 import { TextureGenerator } from '../graphics/TextureGenerator';
 import { AutoTileSystem } from '../graphics/AutoTileSystem';
 import { MenuScene, GameSettings } from './MenuScene';
 import { AudioManager } from '../audio/AudioManager';
+import { WeatherSystem, WeatherType } from '../effects/WeatherSystem';
 
 export class GameScene extends Phaser.Scene {
     private player!: Phaser.GameObjects.Sprite;
@@ -41,6 +42,12 @@ export class GameScene extends Phaser.Scene {
     private bestTimeText!: Phaser.GameObjects.Text;
     private backToMenuButton!: Phaser.GameObjects.Text;
     private audioManager!: AudioManager;
+    private checkpointSprites: Phaser.GameObjects.Sprite[] = [];
+    private collectibleSprites: Phaser.GameObjects.Sprite[] = [];
+    private scoreText!: Phaser.GameObjects.Text;
+    private collectedItems = 0;
+    private weatherSystem!: WeatherSystem;
+    private weatherText!: Phaser.GameObjects.Text;
 
     constructor() {
         super({ key: 'GameScene' });
@@ -70,11 +77,17 @@ export class GameScene extends Phaser.Scene {
         this.generateNewMap();
         this.createGrid();
         this.createTerrain();
+        this.createCheckpoints();
+        this.createCollectibles();
         this.createPlayer();
         this.createGoal();
         this.createUI();
         this.setupControls();
         this.updatePlayerPosition();
+        
+        // Initialize weather system with the same RNG as map generator
+        this.weatherSystem = new WeatherSystem(this, this.mapGenerator['rng']);
+        this.weatherSystem.setWeather(WeatherType.CLEAR);
     }
 
     private createGrid(): void {
@@ -197,6 +210,20 @@ export class GameScene extends Phaser.Scene {
         this.backToMenuButton.on('pointerdown', () => {
             this.scene.start('MenuScene');
         });
+
+        this.scoreText = this.add.text(570, 400, '', {
+            fontSize: '16px',
+            color: '#ffffff',
+            backgroundColor: '#000000',
+            padding: { x: 8, y: 4 }
+        });
+
+        this.weatherText = this.add.text(570, 450, '', {
+            fontSize: '14px',
+            color: '#85c1e9',
+            backgroundColor: '#000000',
+            padding: { x: 8, y: 4 }
+        });
     }
 
     private setupControls(): void {
@@ -231,6 +258,11 @@ export class GameScene extends Phaser.Scene {
         this.goalX = this.currentMap.goalX;
         this.goalY = this.currentMap.goalY;
         this.startTime = this.time.now;
+        this.collectedItems = 0;
+        
+        // Reset checkpoints and collectibles
+        this.currentMap.checkpoints.forEach(cp => cp.visited = false);
+        this.currentMap.collectibles.forEach(item => item.collected = false);
     }
 
     private createTerrain(): void {
@@ -281,6 +313,70 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
+    private createCheckpoints(): void {
+        this.checkpointSprites = [];
+        
+        this.currentMap.checkpoints.forEach((checkpoint, index) => {
+            const sprite = this.add.sprite(
+                checkpoint.x * this.gridSize + 50 + this.gridSize / 2,
+                checkpoint.y * this.gridSize + 50 + this.gridSize / 2,
+                'checkpoint'
+            );
+            sprite.setDisplaySize(this.gridSize - 8, this.gridSize - 8);
+            sprite.setDepth(5);
+            
+            // Add pulsing animation
+            this.tweens.add({
+                targets: sprite,
+                scaleX: 1.1,
+                scaleY: 1.1,
+                duration: 1500,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+            
+            this.checkpointSprites.push(sprite);
+        });
+    }
+
+    private createCollectibles(): void {
+        this.collectibleSprites = [];
+        
+        this.currentMap.collectibles.forEach(item => {
+            const sprite = this.add.sprite(
+                item.x * this.gridSize + 50 + this.gridSize / 2,
+                item.y * this.gridSize + 50 + this.gridSize / 2,
+                item.type
+            );
+            sprite.setDisplaySize(this.gridSize - 12, this.gridSize - 12);
+            sprite.setDepth(5);
+            
+            // Add floating animation
+            this.tweens.add({
+                targets: sprite,
+                y: sprite.y - 3,
+                duration: 1000,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+            
+            // Add rotation for stars
+            if (item.type === 'star') {
+                this.tweens.add({
+                    targets: sprite,
+                    rotation: Math.PI * 2,
+                    duration: 2000,
+                    repeat: -1,
+                    ease: 'Linear'
+                });
+            }
+            
+            this.collectibleSprites.push(sprite);
+        });
+    }
+
     private updateUI(): void {
         this.positionText.setText(`Position: (${this.playerX}, ${this.playerY})`);
         
@@ -305,6 +401,14 @@ export class GameScene extends Phaser.Scene {
             this.bestTimeText.setText(`Best: ${bestTime.toFixed(1)}s`);
         } else {
             this.bestTimeText.setText('Best: --');
+        }
+        
+        const totalCollectibles = this.currentMap.collectibles.length;
+        const checkpointsVisited = this.currentMap.checkpoints.filter(cp => cp.visited).length;
+        this.scoreText.setText(`Items: ${this.collectedItems}/${totalCollectibles}\nCheckpoints: ${checkpointsVisited}/${this.currentMap.checkpoints.length}`);
+        
+        if (this.weatherSystem) {
+            this.weatherText.setText(`Weather: ${this.weatherSystem.getWeatherInfo()}`);
         }
     }
 
@@ -388,6 +492,61 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
+    private checkCollectibles(): void {
+        this.currentMap.collectibles.forEach((item, index) => {
+            if (!item.collected && item.x === this.playerX && item.y === this.playerY) {
+                item.collected = true;
+                this.collectedItems++;
+                
+                // Hide the sprite
+                const sprite = this.collectibleSprites[index];
+                if (sprite) {
+                    // Play collection animation
+                    this.tweens.add({
+                        targets: sprite,
+                        scaleX: 1.5,
+                        scaleY: 1.5,
+                        alpha: 0,
+                        duration: 300,
+                        ease: 'Power2',
+                        onComplete: () => {
+                            sprite.destroy();
+                        }
+                    });
+                }
+                
+                // Play collection sound based on item type
+                this.audioManager.playMenuSelect();
+            }
+        });
+    }
+
+    private checkCheckpoints(): void {
+        this.currentMap.checkpoints.forEach((checkpoint, index) => {
+            if (!checkpoint.visited && checkpoint.x === this.playerX && checkpoint.y === this.playerY) {
+                checkpoint.visited = true;
+                
+                // Change checkpoint appearance
+                const sprite = this.checkpointSprites[index];
+                if (sprite) {
+                    sprite.setTint(0x2ecc71); // Green tint for visited
+                    
+                    // Play checkpoint activation animation
+                    this.tweens.add({
+                        targets: sprite,
+                        scaleX: 1.3,
+                        scaleY: 1.3,
+                        duration: 200,
+                        yoyo: true,
+                        ease: 'Back.easeOut'
+                    });
+                }
+                
+                this.audioManager.playMenuConfirm();
+            }
+        });
+    }
+
     private movePlayer(dx: number, dy: number): void {
         const newX = this.playerX + dx;
         const newY = this.playerY + dy;
@@ -409,6 +568,19 @@ export class GameScene extends Phaser.Scene {
                 
                 this.createMovementParticles();
                 this.audioManager.playStep();
+                this.checkCollectibles();
+                this.checkCheckpoints();
+                
+                // Apply weather movement modifier
+                if (this.weatherSystem) {
+                    const weather = this.weatherSystem.getCurrentWeather();
+                    if (weather.movementModifier < 1.0) {
+                        // Add a slight delay for movement in bad weather
+                        this.time.delayedCall(100 * (1.0 - weather.movementModifier), () => {
+                            // Movement is already completed, this just adds a delay feel
+                        });
+                    }
+                }
             }
         }
     }
@@ -497,5 +669,12 @@ export class GameScene extends Phaser.Scene {
         } else if (justDown(this.cursors.down!) && justDown(this.cursors.right!)) {
             this.movePlayer(1, 1);
         }
+    }
+
+    destroy(): void {
+        if (this.weatherSystem) {
+            this.weatherSystem.destroy();
+        }
+        super.destroy();
     }
 }

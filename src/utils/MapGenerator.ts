@@ -18,6 +18,19 @@ export interface TerrainConfig {
     movementSpeed: number;
 }
 
+export interface Checkpoint {
+    x: number;
+    y: number;
+    visited: boolean;
+}
+
+export interface CollectibleItem {
+    x: number;
+    y: number;
+    type: 'coin' | 'gem' | 'star';
+    collected: boolean;
+}
+
 export interface MapData {
     grid: TerrainType[][];
     width: number;
@@ -27,6 +40,8 @@ export interface MapData {
     goalX: number;
     goalY: number;
     seed: string;
+    checkpoints: Checkpoint[];
+    collectibles: CollectibleItem[];
 }
 
 export class MapGenerator {
@@ -47,6 +62,8 @@ export class MapGenerator {
         const grid = this.generateTerrain();
         const { startX, startY } = this.findStartPosition(grid);
         const { goalX, goalY } = this.findGoalPosition(grid, startX, startY);
+        const checkpoints = this.generateCheckpoints(grid, startX, startY, goalX, goalY);
+        const collectibles = this.generateCollectibles(grid, startX, startY, goalX, goalY, checkpoints);
 
         return {
             grid,
@@ -56,7 +73,9 @@ export class MapGenerator {
             startY,
             goalX,
             goalY,
-            seed: mapSeed
+            seed: mapSeed,
+            checkpoints,
+            collectibles
         };
     }
 
@@ -331,6 +350,74 @@ export class MapGenerator {
         }
 
         return { goalX, goalY };
+    }
+
+    private generateCheckpoints(grid: TerrainType[][], startX: number, startY: number, goalX: number, goalY: number): Checkpoint[] {
+        const checkpoints: Checkpoint[] = [];
+        const path = this.findPath(grid, startX, startY, goalX, goalY);
+        
+        if (path.length < 6) return checkpoints; // Too short for checkpoints
+        
+        // Place checkpoints at roughly 1/3 and 2/3 of the path
+        const checkpointIndices = [
+            Math.floor(path.length * 0.33),
+            Math.floor(path.length * 0.66)
+        ];
+        
+        for (const index of checkpointIndices) {
+            if (index < path.length) {
+                const [x, y] = path[index];
+                checkpoints.push({ x, y, visited: false });
+            }
+        }
+        
+        return checkpoints;
+    }
+
+    private generateCollectibles(
+        grid: TerrainType[][], 
+        startX: number, 
+        startY: number, 
+        goalX: number, 
+        goalY: number,
+        checkpoints: Checkpoint[]
+    ): CollectibleItem[] {
+        const collectibles: CollectibleItem[] = [];
+        const numCollectibles = 5 + Math.floor(this.rng() * 8); // 5-12 collectibles
+        const occupiedPositions = new Set<string>();
+        
+        // Mark start, goal, and checkpoint positions as occupied
+        occupiedPositions.add(`${startX},${startY}`);
+        occupiedPositions.add(`${goalX},${goalY}`);
+        checkpoints.forEach(cp => occupiedPositions.add(`${cp.x},${cp.y}`));
+        
+        for (let i = 0; i < numCollectibles; i++) {
+            let attempts = 0;
+            let validPosition = false;
+            
+            while (!validPosition && attempts < 50) {
+                const x = Math.floor(this.rng() * this.width);
+                const y = Math.floor(this.rng() * this.height);
+                const posKey = `${x},${y}`;
+                
+                if (!occupiedPositions.has(posKey) && this.isWalkable(grid[y][x])) {
+                    const itemType = this.getRandomItemType();
+                    collectibles.push({ x, y, type: itemType, collected: false });
+                    occupiedPositions.add(posKey);
+                    validPosition = true;
+                }
+                attempts++;
+            }
+        }
+        
+        return collectibles;
+    }
+
+    private getRandomItemType(): 'coin' | 'gem' | 'star' {
+        const rand = this.rng();
+        if (rand < 0.6) return 'coin';
+        if (rand < 0.85) return 'gem';
+        return 'star';
     }
 
     private isWalkable(terrain: TerrainType): boolean {
