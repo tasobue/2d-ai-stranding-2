@@ -10,7 +10,7 @@ export interface GameSettings {
 
 export class MenuScene extends Phaser.Scene {
     private gameSettings: GameSettings = {
-        mapSize: 'medium',
+        mapSize: 'standard',
         difficulty: 'normal'
     };
     
@@ -30,7 +30,7 @@ export class MenuScene extends Phaser.Scene {
         this.audioManager = new AudioManager(this);
         this.configManager = new GameConfigManager();
         this.availableMapSizes = this.configManager.getAvailableMapSizes()
-            .filter(size => size.maxDimension <= 200); // Only show reasonable sizes in menu
+            .filter(size => size.name === 'standard'); // Only show 1000x1000 map
         
         this.createTitle();
         this.createMapSizeSelector();

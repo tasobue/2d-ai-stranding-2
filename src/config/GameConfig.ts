@@ -69,11 +69,11 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
             displayName: 'Gigantic (200x200)',
             maxDimension: 200
         },
-        custom_1000: {
-            name: 'custom_1000',
+        standard: {
+            name: 'standard',
             width: 1000,
             height: 1000,
-            displayName: 'Custom 1000x1000',
+            displayName: 'Standard (1000x1000)',
             maxDimension: 1000
         },
         custom_5000: {
@@ -92,12 +92,12 @@ export const DEFAULT_GAME_CONFIG: GameConfig = {
         }
     },
     viewport: {
-        width: 200,
-        height: 200
+        width: 50,
+        height: 50
     },
     performance: {
         maxMapSize: 10000,
-        tileRenderDistance: 100
+        tileRenderDistance: 25
     }
 };
 

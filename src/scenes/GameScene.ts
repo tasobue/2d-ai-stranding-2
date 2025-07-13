@@ -62,6 +62,8 @@ export class GameScene extends Phaser.Scene {
     private viewportHeight = 0;
     private renderDistance = 100;
     private cameraContainer!: Phaser.GameObjects.Container;
+    private infoPopup!: Phaser.GameObjects.Container;
+    private showingPopup = false;
 
     constructor() {
         super({ key: 'GameScene' });
@@ -75,14 +77,12 @@ export class GameScene extends Phaser.Scene {
         this.mapWidth = dimensions.width;
         this.mapHeight = dimensions.height;
         
-        // Check if we should use viewport system
-        this.useViewport = this.configManager.shouldUseViewport(this.gameSettings.mapSize);
-        if (this.useViewport) {
-            const viewportSize = this.configManager.getViewportSize();
-            this.viewportWidth = viewportSize.width;
-            this.viewportHeight = viewportSize.height;
-            this.renderDistance = this.configManager.getTileRenderDistance();
-        }
+        // Always use viewport system for 1000x1000 maps
+        this.useViewport = true;
+        const viewportSize = this.configManager.getViewportSize();
+        this.viewportWidth = viewportSize.width;
+        this.viewportHeight = viewportSize.height;
+        this.renderDistance = this.configManager.getTileRenderDistance();
         
         this.mapGenerator = new MapGenerator(this.mapWidth, this.mapHeight);
         this.startTime = this.time.now;
@@ -186,12 +186,14 @@ export class GameScene extends Phaser.Scene {
         });
         this.distanceText.setVisible(this.showDetailedInfo);
 
+        // Hide restart button by default - only show in popup
         this.restartButton = this.add.text(570, 120, 'Restart (R)', {
             fontSize: '16px',
             color: '#ffffff',
             backgroundColor: '#333333',
             padding: { x: 8, y: 4 }
         });
+        this.restartButton.setVisible(false);
         
         this.restartButton.setInteractive({ useHandCursor: true });
         this.restartButton.on('pointerdown', () => {
@@ -206,12 +208,14 @@ export class GameScene extends Phaser.Scene {
         });
         this.seedText.setVisible(this.showDetailedInfo);
 
+        // Hide show path button by default - only show in popup
         this.showPathButton = this.add.text(570, 200, 'Show Path (P)', {
             fontSize: '16px',
             color: '#ffffff',
             backgroundColor: '#2c3e50',
             padding: { x: 8, y: 4 }
         });
+        this.showPathButton.setVisible(false);
         
         this.showPathButton.setInteractive({ useHandCursor: true });
         this.showPathButton.on('pointerdown', () => {
@@ -226,57 +230,68 @@ export class GameScene extends Phaser.Scene {
         });
         this.routeText.setVisible(this.showDetailedInfo);
 
-        this.toggleInfoButton = this.add.text(570, 280, 'Show Info (I)', {
+        this.toggleInfoButton = this.add.text(20, 90, 'Show Info (I)', {
             fontSize: '16px',
             color: '#ffffff',
             backgroundColor: '#34495e',
             padding: { x: 8, y: 4 }
         });
+        this.toggleInfoButton.setDepth(200);
         
         this.toggleInfoButton.setInteractive({ useHandCursor: true });
         this.toggleInfoButton.on('pointerdown', () => {
             this.toggleDetailedInfo();
         });
 
+        // Hide time text by default - only show in popup
         this.timeText = this.add.text(570, 320, '', {
             fontSize: '16px',
             color: '#ffffff',
             backgroundColor: '#000000',
             padding: { x: 8, y: 4 }
         });
+        this.timeText.setVisible(false);
 
+        // Hide best time text by default - only show in popup
         this.bestTimeText = this.add.text(570, 360, '', {
             fontSize: '14px',
             color: '#f39c12',
             backgroundColor: '#000000',
             padding: { x: 8, y: 4 }
         });
+        this.bestTimeText.setVisible(false);
 
+        // Hide menu button by default - only show in popup
         this.backToMenuButton = this.add.text(570, 400, 'Menu (M)', {
             fontSize: '16px',
             color: '#ffffff',
             backgroundColor: '#8e44ad',
             padding: { x: 8, y: 4 }
         });
+        this.backToMenuButton.setVisible(false);
         
         this.backToMenuButton.setInteractive({ useHandCursor: true });
         this.backToMenuButton.on('pointerdown', () => {
             this.scene.start('MenuScene');
         });
 
+        // Hide score text by default - only show in popup
         this.scoreText = this.add.text(570, 440, '', {
             fontSize: '16px',
             color: '#ffffff',
             backgroundColor: '#000000',
             padding: { x: 8, y: 4 }
         });
+        this.scoreText.setVisible(false);
 
+        // Hide weather text by default - only show in popup
         this.weatherText = this.add.text(570, 480, '', {
             fontSize: '14px',
             color: '#85c1e9',
             backgroundColor: '#000000',
             padding: { x: 8, y: 4 }
         });
+        this.weatherText.setVisible(false);
 
         // Create HP UI
         this.createHPUI();
@@ -758,23 +773,26 @@ export class GameScene extends Phaser.Scene {
     }
 
     private createHPUI(): void {
-        // HP Text
-        this.hpText = this.add.text(570, 490, '', {
+        // HP Text - moved to top-left
+        this.hpText = this.add.text(20, 20, '', {
             fontSize: '16px',
             color: '#e74c3c',
             backgroundColor: '#000000',
             padding: { x: 8, y: 4 }
         });
+        this.hpText.setDepth(200); // High depth to stay on top
 
-        // HP Bar Background
+        // HP Bar Background - moved to top-left
         this.hpBarBg = this.add.graphics();
         this.hpBarBg.fillStyle(0x333333);
-        this.hpBarBg.fillRect(570, 520, 120, 20);
+        this.hpBarBg.fillRect(20, 50, 120, 20);
         this.hpBarBg.lineStyle(2, 0x666666);
-        this.hpBarBg.strokeRect(570, 520, 120, 20);
+        this.hpBarBg.strokeRect(20, 50, 120, 20);
+        this.hpBarBg.setDepth(200);
 
-        // HP Bar
+        // HP Bar - moved to top-left
         this.hpBar = this.add.graphics();
+        this.hpBar.setDepth(201);
     }
 
     private updateHPUI(): void {
@@ -794,7 +812,7 @@ export class GameScene extends Phaser.Scene {
         }
         
         this.hpBar.fillStyle(barColor);
-        this.hpBar.fillRect(572, 552, barWidth, 16);
+        this.hpBar.fillRect(22, 52, barWidth, 16);
     }
 
     private applyTerrainDamage(terrainType: TerrainType): void {
@@ -944,15 +962,109 @@ export class GameScene extends Phaser.Scene {
         
         // Update button text
         this.toggleInfoButton.setText(this.showDetailedInfo ? 'Hide Info (I)' : 'Show Info (I)');
+        
+        // Toggle popup instead of individual elements
+        this.toggleInfoPopup();
+    }
+
+    private createInfoPopup(): void {
+        // Create popup container
+        this.infoPopup = this.add.container(400, 300);
+        this.infoPopup.setDepth(300);
+        this.infoPopup.setVisible(false);
+        
+        // Popup background
+        const popupBg = this.add.rectangle(0, 0, 500, 400, 0x000000, 0.9);
+        popupBg.setStrokeStyle(2, 0x666666);
+        this.infoPopup.add(popupBg);
+        
+        // Title
+        const title = this.add.text(0, -180, 'Game Information', {
+            fontSize: '24px',
+            color: '#ffffff',
+            fontStyle: 'bold'
+        });
+        title.setOrigin(0.5);
+        this.infoPopup.add(title);
+        
+        // Add UI elements to popup
+        this.infoPopup.add([
+            this.positionText,
+            this.distanceText,
+            this.seedText,
+            this.routeText,
+            this.restartButton,
+            this.showPathButton,
+            this.backToMenuButton,
+            this.timeText,
+            this.bestTimeText,
+            this.scoreText,
+            this.weatherText
+        ]);
+        
+        // Reposition elements within popup
+        this.repositionPopupElements();
+        
+        // Close button
+        const closeButton = this.add.text(200, -180, 'X', {
+            fontSize: '24px',
+            color: '#e74c3c',
+            backgroundColor: '#333333',
+            padding: { x: 8, y: 4 }
+        });
+        closeButton.setInteractive({ useHandCursor: true });
+        closeButton.on('pointerdown', () => {
+            this.toggleInfoPopup();
+        });
+        this.infoPopup.add(closeButton);
+    }
+
+    private repositionPopupElements(): void {
+        // Position elements within the popup
+        this.positionText.setPosition(-200, -120);
+        this.distanceText.setPosition(-200, -90);
+        this.seedText.setPosition(-200, -60);
+        this.routeText.setPosition(-200, -30);
+        
+        this.timeText.setPosition(-200, 0);
+        this.bestTimeText.setPosition(-200, 30);
+        this.scoreText.setPosition(-200, 60);
+        this.weatherText.setPosition(-200, 120);
+        
+        this.restartButton.setPosition(50, -60);
+        this.showPathButton.setPosition(50, -20);
+        this.backToMenuButton.setPosition(50, 20);
+        
+        // Make all elements visible in popup
+        this.positionText.setVisible(true);
+        this.distanceText.setVisible(true);
+        this.seedText.setVisible(true);
+        this.routeText.setVisible(true);
+        this.restartButton.setVisible(true);
+        this.showPathButton.setVisible(true);
+        this.backToMenuButton.setVisible(true);
+    }
+
+    private toggleInfoPopup(): void {
+        if (!this.showDetailedInfo) {
+            this.infoPopup.setVisible(false);
+            this.showingPopup = false;
+        } else {
+            this.infoPopup.setVisible(true);
+            this.showingPopup = true;
+        }
     }
 
     private setupViewportSystem(): void {
         // Create container for all game objects
         this.cameraContainer = this.add.container(0, 0);
         
-        // Set camera bounds and enable smooth following
+        // Set camera bounds for the entire map
         this.cameras.main.setBounds(0, 0, this.mapWidth * this.gridSize + 100, this.mapHeight * this.gridSize + 100);
-        this.cameras.main.setLerp(0.1, 0.1);
+        this.cameras.main.setLerp(0.05, 0.05); // Smoother following
+        
+        // Set camera viewport size to show 50x50 area
+        this.cameras.main.setSize(this.viewportWidth * this.gridSize, this.viewportHeight * this.gridSize);
         
         // Initially create only viewport-sized terrain
         this.createViewportTerrain();
@@ -973,11 +1085,12 @@ export class GameScene extends Phaser.Scene {
     private updateViewport(): void {
         if (!this.useViewport) return;
         
-        // Calculate visible area around player
-        const startX = Math.max(0, this.playerX - this.renderDistance);
-        const endX = Math.min(this.mapWidth - 1, this.playerX + this.renderDistance);
-        const startY = Math.max(0, this.playerY - this.renderDistance);
-        const endY = Math.min(this.mapHeight - 1, this.playerY + this.renderDistance);
+        // Calculate 50x50 visible area around player (25 tiles in each direction)
+        const halfViewport = Math.floor(this.viewportWidth / 2);
+        const startX = Math.max(0, this.playerX - halfViewport);
+        const endX = Math.min(this.mapWidth - 1, this.playerX + halfViewport);
+        const startY = Math.max(0, this.playerY - halfViewport);
+        const endY = Math.min(this.mapHeight - 1, this.playerY + halfViewport);
         
         // Create/update tiles in visible area
         for (let y = startY; y <= endY; y++) {
@@ -988,19 +1101,23 @@ export class GameScene extends Phaser.Scene {
             }
         }
         
-        // Remove tiles that are too far away to improve performance
+        // Remove tiles that are outside the viewport + buffer zone
+        const bufferZone = 10;
         for (let y = 0; y < this.mapHeight; y++) {
             for (let x = 0; x < this.mapWidth; x++) {
                 const tile = this.terrainTiles[y][x];
-                if (tile && (x < startX - 50 || x > endX + 50 || y < startY - 50 || y > endY + 50)) {
+                if (tile && (x < startX - bufferZone || x > endX + bufferZone || 
+                           y < startY - bufferZone || y > endY + bufferZone)) {
                     tile.destroy();
                     this.terrainTiles[y][x] = null as any;
                 }
             }
         }
         
-        // Update camera to follow player
-        this.cameras.main.startFollow(this.player);
+        // Center camera on player
+        const playerWorldX = this.playerX * this.gridSize + 50 + this.gridSize / 2;
+        const playerWorldY = this.playerY * this.gridSize + 50 + this.gridSize / 2;
+        this.cameras.main.centerOn(playerWorldX, playerWorldY);
     }
 
     private createTerrainTile(x: number, y: number): void {
